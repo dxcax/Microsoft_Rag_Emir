@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microsoft Foundry Local — Offline RAG AI Assistant</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome & Marked.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="dark-theme">
+    <div class="app-layout">
+        
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="ms-logo">
+                    <span class="square sq1"></span>
+                    <span class="square sq2"></span>
+                    <span class="square sq3"></span>
+                    <span class="square sq4"></span>
+                </div>
+                <div class="logo-text">
+                    <h1>Foundry Local <span class="badge-tag">RAG Assistant</span></h1>
+                    <p class="subtitle">Microsoft Summer School — Offline Knowledge Agent</p>
+                </div>
+            </div>
+
+            <!-- Status Indicators -->
+            <div class="status-bar">
+                <div class="status-pill clickable" id="foundryStatusPill" title="Tıkla: Bağlantı ve Model Detaylarını İncele">
+                    <span class="status-dot warning"></span>
+                    <span class="status-text">Foundry Local: Bağlanıyor...</span>
+                </div>
+                <div class="status-pill">
+                    <i class="fa-solid fa-database"></i>
+                    <span id="vectorEngineText">SQLite Vector DB</span>
+                </div>
+                <div class="status-pill highlight">
+                    <i class="fa-solid fa-file-contract"></i>
+                    <span id="indexedDocsCount">0 Doküman</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN CONTENT AREA -->
+        <div class="main-body">
+            
+            <!-- LEFT SIDEBAR: CONTROLS & DOCS -->
+            <aside class="sidebar">
+                
+                <!-- UPLOAD SECTION -->
+                <div class="glass-card upload-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>Doküman Yükle & İndeksle</span>
+                    </div>
+                    <div class="drop-zone" id="dropZone">
+                        <i class="fa-solid fa-file-arrow-up drop-icon"></i>
+                        <p class="drop-text">Sürükleyip bırakın veya <strong>dosya seçin</strong></p>
+                        <span class="drop-sub">Sadece .pdf, .docx, .md ve .txt dosyaları</span>
+                        <input type="file" id="fileInput" accept=".pdf,.docx,.md,.txt" hidden>
+                    </div>
+                    <div id="uploadProgress" class="upload-progress hidden">
+                        <div class="spinner"></div>
+                        <span>SQLite veritabanı güncelleniyor...</span>
+                    </div>
+                </div>
+
+                <!-- INDEXED DOCS LIST -->
+                <div class="glass-card docs-card">
+                    <div class="card-header-flex">
+                        <div class="card-title">
+                            <i class="fa-solid fa-folder-tree"></i>
+                            <span>SQLite Veritabanı Dokümanları</span>
+                        </div>
+                        <button class="icon-btn-sm" id="btnRefreshDocs" title="Yenile"><i class="fa-solid fa-rotate-right"></i></button>
+                    </div>
+                    <div class="doc-list" id="docList">
+                        <!-- Loaded via JS -->
+                    </div>
+                </div>
+
+                <!-- RAG PARAMETERS -->
+                <div class="glass-card params-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>RAG Ayarları & Filtre</span>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="topKSlider">Getirilecek Parça Sayısı (Top-K): <strong id="topKVal">3</strong></label>
+                        <input type="range" id="topKSlider" min="1" max="5" value="3" step="1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sourceFilterSelect">Doküman Filtresi</label>
+                        <select id="sourceFilterSelect">
+                            <option value="">Tüm SQLite Dokümanlarında Ara</option>
+                        </select>
+                    </div>
+
+                    <!-- QUICK SAMPLES BASED ON PROJECT SPEC -->
+                    <div class="quick-prompts">
+                        <span class="quick-title">Proje Planı Örnek Sorguları:</span>
+                        <button class="chip-btn" data-query="Foundry Local nedir ve avantajları nelerdir?">💡 Foundry Local Nedir?</button>
+                        <button class="chip-btn" data-query="Program kaç fazdan oluşmaktadır ve haftalık hedefleri nelerdir?">📅 Program Fazları & Haftalar</button>
+                        <button class="chip-btn" data-query="RAG mimarisinde SQLite neden kullanılmaktadır?">🗄️ SQLite Kullanım Amacı</button>
+                        <button class="chip-btn" data-query="Phase 2 kapsamında yapılacak data ingestion adımları nelerdir?">⚙️ Data Ingestion Adımları</button>
+                    </div>
+                </div>
+
+            </aside>
+
+            <!-- RIGHT PANEL: CHAT & CITATION INSPECTOR -->
+            <main class="chat-container">
+                
+                <!-- CHAT MESSAGES DISPLAY -->
+                <div class="chat-messages" id="chatMessages">
+                    <div class="welcome-card glass-card">
+                        <div class="welcome-icon">
+                            <i class="fa-solid fa-brain"></i>
+                        </div>
+                        <h2>Microsoft Foundry Local — RAG AI Assistant</h2>
+                        <p>Bu uygulama, <strong>Summer School Foundry Local Plan</strong> belgesi ve eklediğiniz dokümanları **SQLite veritabanında** depolayarak tamamen offline (çevrimdışı) çalışır.</p>
+                        <div class="welcome-features">
+                            <div class="wf-item"><i class="fa-solid fa-wifi"></i> 100% Offline / No Internet</div>
+                            <div class="wf-item"><i class="fa-solid fa-database"></i> SQLite Vector Database</div>
+                            <div class="wf-item"><i class="fa-solid fa-microchip"></i> Microsoft Foundry Local SDK</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PROMPT INSPECTOR DRAWER (Collapsible) -->
+                <div class="inspector-drawer hidden" id="inspectorDrawer">
+                    <div class="drawer-header">
+                        <span><i class="fa-solid fa-code"></i> Prompt & Context Inspector (Foundry Local Pipeline)</span>
+                        <button class="icon-btn-sm" id="btnCloseInspector"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="drawer-content" id="inspectorContent">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+
+                <!-- CHAT INPUT BAR -->
+                <div class="chat-input-wrapper glass-card">
+                    <textarea id="userInput" placeholder="Dokümanlar hakkında bir soru sorun... (Örn: Foundry Local nedir ve RAG nasıl çalışır?)" rows="2"></textarea>
+                    <div class="input-actions">
+                        <button class="secondary-btn" id="btnToggleInspector" title="Prompt & Context İncele">
+                            <i class="fa-solid fa-terminal"></i> Context İncele
+                        </button>
+                        <button class="primary-btn" id="btnSend">
+                            <span>Gönder</span>
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+
+            </main>
+
+        </div>
+
+    </div>
+
+    <!-- CONNECTION & MODE MODAL -->
+    <div class="modal-overlay hidden" id="connectionModal">
+        <div class="modal-card glass-card">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fa-solid fa-network-wired" style="color: var(--accent-cyan);"></i>
+                    <span>Sistem & Bağlantı Durumu</span>
+                </div>
+                <button class="icon-btn-sm" id="btnCloseModal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="conn-card active-card">
+                    <div class="conn-icon"><i class="fa-solid fa-microchip"></i></div>
+                    <div class="conn-details">
+                        <h4>Microsoft Foundry Local Engine</h4>
+                        <p id="modalFoundryMode">Mod: Foundry Local SDK (Local Inference)</p>
+                        <span class="badge-tag green" id="modalFoundryModel">phi-3.5-mini (Aktif)</span>
+                    </div>
+                    <span class="status-indicator online">BAĞLI</span>
+                </div>
+
+                <div class="conn-card">
+                    <div class="conn-icon"><i class="fa-solid fa-database"></i></div>
+                    <div class="conn-details">
+                        <h4>SQLite Vector Storage</h4>
+                        <p id="modalSqlitePath">Veritabanı: data/rag_database.sqlite</p>
+                        <span class="badge-tag blue" id="modalSqliteCount">81 Chunks</span>
+                    </div>
+                    <span class="status-indicator online">LOKAL</span>
+                </div>
+
+                <div class="conn-card">
+                    <div class="conn-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                    <div class="conn-details">
+                        <h4>Gizlilik & Uyum Modu</h4>
+                        <p>100% Offline / Zero Network Calls (Verileriniz dışarı çıkmaz)</p>
+                    </div>
+                    <span class="status-indicator protected">KORUMALI</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=2.0"></script>
+</body>
+</html>
