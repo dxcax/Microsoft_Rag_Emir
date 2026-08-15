@@ -171,7 +171,19 @@ class RAGEngine:
             hybrid_scores.append((calibrated, idx))
 
         hybrid_scores.sort(key=lambda x: x[0], reverse=True)
-        top_matches = hybrid_scores[:top_k]
+
+        # Per-document fairness cap: each doc contributes at most max_per_doc chunks
+        unique_docs = len({c["source_filename"] for c in all_chunks})
+        max_per_doc = max(1, -(-top_k // max(1, unique_docs)))  # ceiling division
+        doc_counts: Dict[str, int] = {}
+        top_matches = []
+        for score, idx in hybrid_scores:
+            doc = all_chunks[idx]["source_filename"]
+            if doc_counts.get(doc, 0) < max_per_doc:
+                top_matches.append((score, idx))
+                doc_counts[doc] = doc_counts.get(doc, 0) + 1
+            if len(top_matches) == top_k:
+                break
 
         results = []
         for rank, (score, idx) in enumerate(top_matches):
