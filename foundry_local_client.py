@@ -1,34 +1,23 @@
-"""
-Microsoft Foundry Local Client — v3.0
-Uses foundry-local-sdk v1.2.4 correct API:
-  - Configuration + FoundryLocalManager.start_web_service()
-  - catalog.get_model(alias).load() then .get_chat_client() / .get_embedding_client()
-  - Falls back to SentenceTransformers + extractive if Foundry not available
-"""
-
 import os
 import logging
 from typing import List, Dict, Any
 
 logger = logging.getLogger("foundry_client")
 
-# Model aliases to try (in order of preference)
-CHAT_MODEL_ALIASES   = ["phi-3.5-mini", "phi-4-mini", "qwen3-0.6b", "qwen2.5-0.5b"]
-EMBED_MODEL_ALIASES  = ["qwen3-embedding-0.6b", "all-minilm-l6-v2"]
+CHAT_MODEL_ALIASES  = ["phi-3.5-mini", "phi-4-mini", "qwen3-0.6b", "qwen2.5-0.5b"]
+EMBED_MODEL_ALIASES = ["qwen3-embedding-0.6b", "all-minilm-l6-v2"]
 
 
 class FoundryLocalClient:
     def __init__(self):
-        self._st_model      = None   # SentenceTransformer fallback
-        self._mgr           = None   # FoundryLocalManager
-        self._chat_model    = None   # loaded Model object for chat
-        self._embed_model   = None   # loaded Model object for embeddings
-        self._chat_alias    = None
-        self._embed_alias   = None
-        self.mode           = "local_fallback"
+        self._st_model   = None
+        self._mgr        = None
+        self._chat_model = None
+        self._embed_model = None
+        self._chat_alias  = None
+        self._embed_alias = None
+        self.mode = "local_fallback"
         self._init_foundry()
-
-    # ── Foundry Local SDK Initialisation ────────────────────────
 
     def _init_foundry(self):
         try:
@@ -39,30 +28,26 @@ class FoundryLocalClient:
             self._mgr.start_web_service()
             cat = self._mgr.catalog
 
-            # Load chat model
             for alias in CHAT_MODEL_ALIASES:
                 try:
                     m = cat.get_model(alias)
                     if m.is_cached:
                         logger.info(f"Loading chat model '{alias}' into RAM...")
                         m.load()
-                        self._chat_model  = m
-                        self._chat_alias  = alias
+                        self._chat_model = m
+                        self._chat_alias = alias
                         logger.info(f"OK Chat model '{alias}' loaded.")
                         break
                 except Exception as e:
                     logger.debug(f"Chat model '{alias}' not available: {e}")
 
-            # Load embedding model
             for alias in EMBED_MODEL_ALIASES:
                 try:
                     m = cat.get_model(alias)
                     if m.is_cached:
-                        logger.info(f"Loading embedding model '{alias}' into RAM...")
                         m.load()
                         self._embed_model = m
                         self._embed_alias = alias
-                        logger.info(f"OK Embedding model '{alias}' loaded.")
                         break
                 except Exception as e:
                     logger.debug(f"Embed model '{alias}' not available: {e}")
@@ -71,7 +56,7 @@ class FoundryLocalClient:
                 self.mode = "foundry_sdk"
                 logger.info(f"Foundry Local SDK active — chat={self._chat_alias}, embed={self._embed_alias or 'SentenceTransformers'}")
             else:
-                logger.info("Foundry Local SDK started but no cached models found — using SentenceTransformers fallback.")
+                logger.info("Foundry Local SDK started but no cached models found.")
 
         except Exception as e:
             logger.info(f"Foundry Local SDK not available ({e}). Using local fallback.")
@@ -85,8 +70,6 @@ class FoundryLocalClient:
             "embed_model": self._embed_alias or "SentenceTransformers/all-MiniLM-L6-v2",
         }
 
-    # ── SentenceTransformers fallback ────────────────────────────
-
     def _get_st_model(self):
         if self._st_model is None:
             from sentence_transformers import SentenceTransformer
@@ -94,13 +77,10 @@ class FoundryLocalClient:
             self._st_model = SentenceTransformer("all-MiniLM-L6-v2")
         return self._st_model
 
-    # ── Embeddings ───────────────────────────────────────────────
-
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         if not texts:
             return []
 
-        # Try Foundry Local embedding model
         if self._embed_model is not None:
             try:
                 emb_client = self._embed_model.get_embedding_client()
@@ -108,11 +88,8 @@ class FoundryLocalClient:
             except Exception as e:
                 logger.warning(f"Foundry embedding failed: {e}. Falling back to SentenceTransformers.")
 
-        # SentenceTransformers fallback
         model = self._get_st_model()
         return model.encode(texts, convert_to_numpy=True, show_progress_bar=False).tolist()
-
-    # ── Chat / Answer Generation ─────────────────────────────────
 
     def generate_completion(
         self,
@@ -139,12 +116,10 @@ class FoundryLocalClient:
             },
         ]
 
-        # Foundry Local chat
         if self._chat_model is not None:
             try:
                 chat_client = self._chat_model.get_chat_client()
                 resp = chat_client.complete_chat(messages=messages)
-                # Extract text content from ChatCompletion object
                 if hasattr(resp, 'choices') and resp.choices:
                     answer = resp.choices[0].message.content
                 elif isinstance(resp, str):
@@ -159,7 +134,6 @@ class FoundryLocalClient:
             except Exception as e:
                 logger.warning(f"Foundry chat failed: {e}")
 
-        # Extractive fallback
         return {
             "answer": self._extractive_answer(user_prompt, context_chunks),
             "engine": "Local Extractive RAG (run: winget install Microsoft.FoundryLocal for generative AI)",

@@ -1,8 +1,3 @@
-"""
-SQLite Database Manager for Microsoft Foundry Local RAG Application.
-Persists document metadata, text chunks, and vector embeddings in a single self-contained SQLite file.
-"""
-
 import sqlite3
 import json
 import os
@@ -24,11 +19,8 @@ class SQLiteDBManager:
         return conn
 
     def _init_db(self):
-        """Initialize SQLite database tables for documents and vector chunks."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Documents metadata table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS documents (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,8 +31,6 @@ class SQLiteDBManager:
                     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
-
-            # Document text chunks and vector embeddings table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS document_chunks (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +47,7 @@ class SQLiteDBManager:
             logger.info("SQLite database initialized successfully.")
 
     def clear_database(self):
-        """Wipe all documents and chunks from SQLite database."""
+        self._init_db()
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM document_chunks;")
@@ -74,22 +64,16 @@ class SQLiteDBManager:
         chunks: List[Dict[str, Any]],
         embeddings: List[List[float]]
     ) -> int:
-        """Store document metadata and its embedded chunks into SQLite."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Remove existing document record if re-indexing
             cursor.execute("DELETE FROM documents WHERE filename = ?;", (filename,))
-            
-            # Insert document row
             cursor.execute("""
                 INSERT INTO documents (filename, filepath, file_size, char_count)
                 VALUES (?, ?, ?, ?);
             """, (filename, filepath, file_size, char_count))
-            
+
             doc_id = cursor.lastrowid
 
-            # Insert chunks with serialized embedding vector
             for idx, (chunk, emb) in enumerate(zip(chunks, embeddings)):
                 emb_json = json.dumps(emb)
                 cursor.execute("""
@@ -102,7 +86,6 @@ class SQLiteDBManager:
             return doc_id
 
     def get_all_documents(self) -> List[Dict[str, Any]]:
-        """Retrieve list of indexed documents from SQLite."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -116,7 +99,6 @@ class SQLiteDBManager:
             return [dict(row) for row in rows]
 
     def get_all_chunks_with_embeddings(self) -> List[Dict[str, Any]]:
-        """Fetch all chunks and deserialized embedding vectors from SQLite for similarity search."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -124,7 +106,6 @@ class SQLiteDBManager:
                 FROM document_chunks;
             """)
             rows = cursor.fetchall()
-            
             chunks = []
             for row in rows:
                 row_dict = dict(row)
@@ -134,14 +115,12 @@ class SQLiteDBManager:
             return chunks
 
     def get_stats(self) -> Dict[str, Any]:
-        """Return summary statistics of the SQLite database."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM documents;")
             doc_count = cursor.fetchone()[0]
             cursor.execute("SELECT COUNT(*) FROM document_chunks;")
             chunk_count = cursor.fetchone()[0]
-            
             return {
                 "doc_count": doc_count,
                 "chunk_count": chunk_count,
